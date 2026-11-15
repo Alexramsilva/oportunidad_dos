@@ -207,6 +207,296 @@ evento = st.dataframe(
 # -----------------------------------------------------
 # ANÁLISIS TÉCNICO DE LA ACCIÓN SELECCIONADA
 # -----------------------------------------------------
+######1 #######
+
+
+# -----------------------------------------------------
+if evento.selection.rows:
+
+    indice = evento.selection.rows[0]
+    ticker = df_display.iloc[indice]["Ticker"]
+
+    st.divider()
+    st.header(f"Análisis técnico: {ticker}")
+
+    # ==========================================
+    # PARÁMETROS
+    # ==========================================
+    periodo = "5y"
+    ventana = 20
+    delta = 0.01
+
+    # ==========================================
+    # DESCARGA DE DATOS
+    # ==========================================
+    try:
+        df = yf.download(
+            ticker,
+            period=periodo,
+            auto_adjust=True,
+            progress=False
+        )
+    except Exception as e:
+        st.error(f"No fue posible descargar los datos de {ticker}: {e}")
+        df = pd.DataFrame()
+
+    # MultiIndex fix
+    if not df.empty and isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = df.dropna()
+
+    if df.empty or not {"Close", "Volume"}.issubset(df.columns):
+        st.warning("No hay información histórica suficiente para generar el análisis.")
+
+    else:
+
+        # ==========================================
+        # VARIABLES
+        # ==========================================
+        close = df["Close"]
+        volume = df["Volume"]
+
+        # ==========================================
+        # SOPORTE
+        # ==========================================
+        df["Support"] = close.rolling(
+            window=ventana
+        ).min().shift(1)
+
+        # ==========================================
+        # VOLUMEN PROMEDIO
+        # ==========================================
+        df["Vol_mean"] = volume.rolling(
+            window=ventana
+        ).mean()
+
+        # ==========================================
+        # RUPTURA
+        # ==========================================
+        df["Breakdown"] = (
+            (close < df["Support"] * (1 - delta)) &
+            (volume > df["Vol_mean"])
+        )
+
+        # ==========================================
+        # ESTADOS
+        # ==========================================
+        df["Estado"] = np.where(
+            df["Breakdown"].fillna(False),
+            1,
+            2
+        )
+
+        estados = df["Estado"].astype(int).tolist()
+
+        # ==========================================
+        # DEPURACIÓN DE ESTADOS
+        # ==========================================
+        # Estado 2 = Ruptura: conservar todas las observaciones
+        # Estado 1 = Sin ruptura: eliminar repeticiones consecutivas
+
+        estados_ajustados = [
+            estados[i]
+            for i in range(len(estados))
+            if estados[i] != 1 or i == 0 or estados[i-1] != 1
+        ]
+
+        # ==========================================
+        # MATRIZ DE FRECUENCIAS
+        # ==========================================
+        conteos = pd.crosstab(
+            pd.Series(estados_ajustados[:-1], name="Origen"),
+            pd.Series(estados_ajustados[1:], name="Destino")
+        ).reindex(
+            index=[1, 2],
+            columns=[1, 2],
+            fill_value=0
+        )
+
+        # ==========================================
+        # MATRIZ DE TRANSICIÓN
+        # ==========================================
+        transicion = conteos.div(
+            conteos.sum(axis=1).replace(0, np.nan),
+            axis=0
+        )
+
+        # ==========================================
+        # INDICADORES DE RUPTURAS CONSECUTIVAS
+        # ==========================================
+        rupturas_consecutivas = [
+            1 if estados_ajustados[i] == 2
+            and estados_ajustados[i+1] == 2
+            else 0
+            for i in range(len(estados_ajustados)-1)
+        ]
+
+        indicador_ruptura = sum(rupturas_consecutivas)
+
+        porcentaje_rupturas = (
+            indicador_ruptura / len(rupturas_consecutivas) * 100
+            if rupturas_consecutivas else 0
+        )
+
+        # Probabilidad de ruptura después de una ruptura
+        prob_ruptura_consecutiva = transicion.loc[2, 2]
+
+        # ==========================================
+        # GRÁFICA SOPORTE
+        # ==========================================
+        fig1, (ax1, ax2) = plt.subplots(
+            2,
+            1,
+            figsize=(14, 8),
+            sharex=True
+        )
+
+        # Precio
+        ax1.plot(
+            df.index,
+            close,
+            label="Close",
+            linewidth=2
+        )
+
+        ax1.plot(
+            df.index,
+            df["Support"],
+            linestyle="--",
+            label="Support"
+        )
+
+        breakdown_mask = df["Breakdown"].fillna(False)
+
+        ax1.scatter(
+            df.index[breakdown_mask],
+            close[breakdown_mask],
+            color="red",
+            label="Ruptura",
+            zorder=5
+        )
+
+        ax1.set_title(f"Ruptura de Soporte - {ticker}")
+        ax1.legend()
+        ax1.grid(True)
+
+        # Volumen
+        ax2.bar(
+            df.index,
+            volume,
+            label="Volumen"
+        )
+
+        ax2.plot(
+            df.index,
+            df["Vol_mean"],
+            color="orange",
+            label="Volumen Promedio"
+        )
+
+        ax2.legend()
+        ax2.grid(True)
+
+        plt.tight_layout()
+        st.pyplot(fig1)
+        plt.close(fig1)
+
+        # ==========================================
+        # RESULTADO DE RUPTURAS
+        # ==========================================
+        st.subheader("Historial de rupturas")
+
+        if breakdown_mask.any():
+            st.dataframe(
+                df.loc[
+                    breakdown_mask,
+                    ["Close", "Support", "Volume", "Vol_mean"]
+                ].sort_index(ascending=False),
+                use_container_width=True
+            )
+        else:
+            st.info(
+                "No se identificaron rupturas de soporte "
+                "con confirmación de volumen."
+            )
+
+        # ==========================================
+        # MATRICES DE MARKOV
+        # ==========================================
+        st.divider()
+        st.subheader("Modelo de transición de estados")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Matriz de frecuencias**")
+            st.dataframe(
+                conteos,
+                use_container_width=True
+            )
+
+        with col2:
+            st.markdown("**Matriz de probabilidades**")
+            st.dataframe(
+                transicion.round(3),
+                use_container_width=True
+            )
+
+        # ==========================================
+        # INDICADORES
+        # ==========================================
+        st.subheader("Indicadores de rupturas")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "Transiciones 2 → 2",
+                indicador_ruptura
+            )
+
+        with col2:
+            st.metric(
+                "Frecuencia de 2 → 2",
+                f"{porcentaje_rupturas:.2f}%"
+            )
+
+        with col3:
+            st.metric(
+                "P(Ruptura | Ruptura)",
+                f"{prob_ruptura_consecutiva:.2%}"
+                if pd.notna(prob_ruptura_consecutiva)
+                else "N/A"
+            )
+
+        # ==========================================
+        # INFORMACIÓN DE ESTADOS
+        # ==========================================
+        with st.expander("Consultar secuencia de estados"):
+
+            st.write("Estados originales:")
+            st.write(estados)
+
+            st.write("Estados ajustados:")
+            st.write(estados_ajustados)
+
+            st.caption(
+                "Estado 2 = Ruptura. "
+                "Estado 1 = Sin ruptura. "
+                "Las repeticiones consecutivas del estado 1 "
+                "se contabilizan una sola vez."
+            )
+
+else:
+    st.info(
+        "Selecciona una acción del ranking para generar "
+        "su análisis técnico."
+    )
+
+# -----------------------------------------------------
+
+
 #######1#######
 
 # -----------------------------------------------------
