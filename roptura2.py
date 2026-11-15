@@ -573,8 +573,8 @@ if evento.selection.rows:
         # ==========================================
         df["Estado"] = np.where(
             df["Breakdown"].fillna(False),
-            1,
-            2
+            2,
+            1
         )
 
         estados = df["Estado"].astype(int).tolist()
@@ -603,7 +603,7 @@ if evento.selection.rows:
         # RUPTURAS CONSECUTIVAS
         # ==========================================
         rupturas_consecutivas = [
-            1 if estados[i] == 1 and estados[i+1] == 1 else 0
+            2 if estados[i] == 2 and estados[i+1] == 2 else 1
             for i in range(len(estados)-1)
         ]
 
@@ -621,8 +621,8 @@ if evento.selection.rows:
         # GRÁFICA SOPORTE
         # ==========================================
         fig1, (ax1, ax2) = plt.subplots(
-            2,
             1,
+            2,
             figsize=(14, 8),
             sharex=True
         )
