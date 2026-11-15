@@ -299,7 +299,7 @@ if evento.selection.rows:
         estados_ajustados = [
             estados[i]
             for i in range(len(estados))
-            if estados[i] != 1 or i == 0 or estados[i-1] != 1
+            if estados[i] != 2 or i == 0 or estados[i-1] != 2
         ]
 
         # ==========================================
