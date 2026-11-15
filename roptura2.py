@@ -49,7 +49,7 @@ TICKERS = ["GAPB.MX","SPY", "GRUMAB.MX",  "NVDA","QUBT", "QTUM", "VOO",
 ]
 
 st.image("NQH.svg", caption="", width=400)
-# st.image("shop.png", width=280)
+st.image("shop.png", width=280)
 st.title("📡 Entry Opportunity Radar")
 st.caption("Alta volatilidad · mayor margen · paciencia estratégica")
 
@@ -360,6 +360,62 @@ else:
     )
 
 # -----------------------------------------------------
+######
+
+# -----------------------------------------------------
+# MATRIZ DE FRECUENCIAS Y PROBABILIDADES DE TRANSICIÓN
+# -----------------------------------------------------
+
+# Matriz de frecuencias
+conteos = pd.crosstab(
+    pd.Series(estados[:-1], name="Origen"),
+    pd.Series(estados[1:], name="Destino")
+).reindex(
+    index=range(1, 3),
+    columns=range(1, 3),
+    fill_value=0
+)
+
+# Matriz de probabilidades
+transicion = conteos.div(
+    conteos.sum(axis=1).replace(0, np.nan),
+    axis=0
+)
+
+# -----------------------------------------------------
+# INDICADOR DE RUPTURAS CONSECUTIVAS
+# -----------------------------------------------------
+
+rupturas_consecutivas = [
+    1 if estados[i] == 1 and estados[i+1] == 1 else 0
+    for i in range(len(estados)-1)
+]
+
+# Indicador general
+indicador_ruptura = sum(rupturas_consecutivas)
+
+# Porcentaje de rupturas consecutivas
+porcentaje_rupturas = (
+    indicador_ruptura / len(rupturas_consecutivas) * 100
+)
+
+# -----------------------------------------------------
+# RESULTADOS
+# -----------------------------------------------------
+
+print("Matriz de frecuencias:")
+display(conteos)
+
+print("Matriz de transición:")
+display(transicion.round(3))
+
+print("Indicador de rupturas consecutivas:")
+print(pd.Series(rupturas_consecutivas).value_counts().sort_index())
+
+print(f"\nNúmero de rupturas consecutivas: {indicador_ruptura}")
+print(f"Porcentaje de rupturas consecutivas: {porcentaje_rupturas:.2f}%")
+#####
+
 # ESTILO
 # -----------------------------------------------------
 st.markdown("""
