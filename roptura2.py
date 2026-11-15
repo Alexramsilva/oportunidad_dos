@@ -207,6 +207,9 @@ evento = st.dataframe(
 # -----------------------------------------------------
 # ANÁLISIS TÉCNICO DE LA ACCIÓN SELECCIONADA
 # -----------------------------------------------------
+#######1#######
+
+# -----------------------------------------------------
 if evento.selection.rows:
 
     indice = evento.selection.rows[0]
@@ -244,6 +247,7 @@ if evento.selection.rows:
 
     if df.empty or not {"Close", "Volume"}.issubset(df.columns):
         st.warning("No hay información histórica suficiente para generar el análisis.")
+
     else:
 
         # ==========================================
@@ -273,6 +277,55 @@ if evento.selection.rows:
             (close < df["Support"] * (1 - delta)) &
             (volume > df["Vol_mean"])
         )
+
+        # ==========================================
+        # ESTADOS
+        # ==========================================
+        df["Estado"] = np.where(
+            df["Breakdown"].fillna(False),
+            1,
+            2
+        )
+
+        estados = df["Estado"].astype(int).tolist()
+
+        # ==========================================
+        # MATRIZ DE FRECUENCIAS
+        # ==========================================
+        conteos = pd.crosstab(
+            pd.Series(estados[:-1], name="Origen"),
+            pd.Series(estados[1:], name="Destino")
+        ).reindex(
+            index=[1, 2],
+            columns=[1, 2],
+            fill_value=0
+        )
+
+        # ==========================================
+        # MATRIZ DE TRANSICIÓN
+        # ==========================================
+        transicion = conteos.div(
+            conteos.sum(axis=1).replace(0, np.nan),
+            axis=0
+        )
+
+        # ==========================================
+        # RUPTURAS CONSECUTIVAS
+        # ==========================================
+        rupturas_consecutivas = [
+            1 if estados[i] == 1 and estados[i+1] == 1 else 0
+            for i in range(len(estados)-1)
+        ]
+
+        indicador_ruptura = sum(rupturas_consecutivas)
+
+        porcentaje_rupturas = (
+            indicador_ruptura / len(rupturas_consecutivas) * 100
+            if rupturas_consecutivas else 0
+        )
+
+        # Probabilidad de ruptura consecutiva
+        prob_ruptura_consecutiva = transicion.loc[1, 1]
 
         # ==========================================
         # GRÁFICA SOPORTE
@@ -353,6 +406,65 @@ if evento.selection.rows:
                 "con confirmación de volumen."
             )
 
+        # ==========================================
+        # MATRICES DE TRANSICIÓN
+        # ==========================================
+        st.divider()
+        st.subheader("Modelo de transición de estados")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Matriz de frecuencias**")
+            st.dataframe(
+                conteos,
+                use_container_width=True
+            )
+
+        with col2:
+            st.markdown("**Matriz de probabilidades**")
+            st.dataframe(
+                transicion.round(3),
+                use_container_width=True
+            )
+
+        # ==========================================
+        # INDICADORES DE RUPTURAS CONSECUTIVAS
+        # ==========================================
+        st.subheader("Indicadores de rupturas consecutivas")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "Rupturas consecutivas",
+                indicador_ruptura
+            )
+
+        with col2:
+            st.metric(
+                "Frecuencia sobre observaciones",
+                f"{porcentaje_rupturas:.2f}%"
+            )
+
+        with col3:
+            st.metric(
+                "P(Ruptura | Ruptura)",
+                f"{prob_ruptura_consecutiva:.2%}"
+                if pd.notna(prob_ruptura_consecutiva)
+                else "N/A"
+            )
+
+        # ==========================================
+        # INTERPRETACIÓN
+        # ==========================================
+        st.caption(
+            "Estado 1 = Ruptura de soporte. "
+            "Estado 2 = Sin ruptura. "
+            "La probabilidad P(1|1) estima la probabilidad "
+            "de observar otra ruptura después de una ruptura."
+        )
+
 else:
     st.info(
         "Selecciona una acción del ranking para generar "
@@ -360,62 +472,8 @@ else:
     )
 
 # -----------------------------------------------------
-######
 
-# -----------------------------------------------------
-# MATRIZ DE FRECUENCIAS Y PROBABILIDADES DE TRANSICIÓN
-# -----------------------------------------------------
-
-# Matriz de frecuencias
-conteos = pd.crosstab(
-    pd.Series(estados[:-1], name="Origen"),
-    pd.Series(estados[1:], name="Destino")
-).reindex(
-    index=range(1, 3),
-    columns=range(1, 3),
-    fill_value=0
-)
-
-# Matriz de probabilidades
-transicion = conteos.div(
-    conteos.sum(axis=1).replace(0, np.nan),
-    axis=0
-)
-
-# -----------------------------------------------------
-# INDICADOR DE RUPTURAS CONSECUTIVAS
-# -----------------------------------------------------
-
-rupturas_consecutivas = [
-    1 if estados[i] == 1 and estados[i+1] == 1 else 0
-    for i in range(len(estados)-1)
-]
-
-# Indicador general
-indicador_ruptura = sum(rupturas_consecutivas)
-
-# Porcentaje de rupturas consecutivas
-porcentaje_rupturas = (
-    indicador_ruptura / len(rupturas_consecutivas) * 100
-)
-
-# -----------------------------------------------------
-# RESULTADOS
-# -----------------------------------------------------
-
-print("Matriz de frecuencias:")
-display(conteos)
-
-print("Matriz de transición:")
-display(transicion.round(3))
-
-print("Indicador de rupturas consecutivas:")
-print(pd.Series(rupturas_consecutivas).value_counts().sort_index())
-
-print(f"\nNúmero de rupturas consecutivas: {indicador_ruptura}")
-print(f"Porcentaje de rupturas consecutivas: {porcentaje_rupturas:.2f}%")
-#####
-
+#######1######
 # ESTILO
 # -----------------------------------------------------
 st.markdown("""
