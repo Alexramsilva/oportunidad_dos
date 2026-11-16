@@ -284,8 +284,8 @@ if evento.selection.rows:
         # ==========================================
         df["Estado"] = np.where(
             df["Breakdown"].fillna(False),
-            1,
-            2
+            2,
+            1
         )
 
         estados = df["Estado"].astype(int).tolist()
@@ -346,8 +346,8 @@ if evento.selection.rows:
         # GRÁFICA SOPORTE
         # ==========================================
         fig1, (ax1, ax2) = plt.subplots(
-            2,
             1,
+            2,
             figsize=(14, 8),
             sharex=True
         )
