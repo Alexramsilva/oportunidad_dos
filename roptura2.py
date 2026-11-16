@@ -213,6 +213,10 @@ evento = st.dataframe(
 # ANÁLISIS TÉCNICO Y MATRIZ DE TRANSICIÓN DE MARKOV
 # -----------------------------------------------------
 
+# -----------------------------------------------------
+# ANÁLISIS TÉCNICO, MARKOV Y AJUSTE POLINOMIAL
+# -----------------------------------------------------
+
 if evento.selection.rows:
 
     indice = evento.selection.rows[0]
@@ -229,7 +233,7 @@ if evento.selection.rows:
     delta = 0.01
 
     # ==========================================
-    # DESCARGA DE DATOS
+    # DESCARGA DE DATOS DIARIOS
     # ==========================================
     try:
         df = yf.download(
@@ -244,9 +248,13 @@ if evento.selection.rows:
 
     # MultiIndex fix
     if not df.empty and isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+        if "Close" in df.columns.get_level_values(0):
+            df.columns = df.columns.get_level_values(0)
+        elif "Close" in df.columns.get_level_values(1):
+            df.columns = df.columns.get_level_values(1)
 
-    df = df.dropna()
+    if not df.empty:
+        df = df.dropna(subset=["Close", "Volume"])
 
     if df.empty or not {"Close", "Volume"}.issubset(df.columns):
 
@@ -345,8 +353,6 @@ if evento.selection.rows:
         # ==========================================
         # INDICADORES DE RUPTURAS
         # ==========================================
-        # Número de transiciones 2 -> 2
-
         rupturas_consecutivas = sum(
             1 for i in range(len(estados_ajustados)-1)
             if estados_ajustados[i] == 2
@@ -507,6 +513,319 @@ if evento.selection.rows:
                 "Las repeticiones consecutivas del estado 1 "
                 "se contabilizan una sola vez."
             )
+
+        # =====================================================
+        # ANÁLISIS INTRADÍA: AJUSTE POLINOMIAL
+        # =====================================================
+
+        st.divider()
+        st.header(f"Análisis intradía: {ticker}")
+
+        # ==========================================
+        # PARÁMETROS INTRADÍA
+        # ==========================================
+        periodo_intradia = "5d"
+        intervalo = "1h"
+        grado_polinomio = 8
+        factor_banda = 2
+
+        # ==========================================
+        # DESCARGA DE DATOS
+        # ==========================================
+        try:
+
+            btc = yf.download(
+                ticker,
+                period=periodo_intradia,
+                interval=intervalo,
+                auto_adjust=True,
+                progress=False
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"No fue posible descargar los datos intradía de {ticker}: {e}"
+            )
+
+            btc = pd.DataFrame()
+
+        # ==========================================
+        # MULTIINDEX FIX
+        # ==========================================
+        if not btc.empty and isinstance(btc.columns, pd.MultiIndex):
+
+            if "Close" in btc.columns.get_level_values(0):
+                btc.columns = btc.columns.get_level_values(0)
+
+            elif "Close" in btc.columns.get_level_values(1):
+                btc.columns = btc.columns.get_level_values(1)
+
+        if btc.empty or "Close" not in btc.columns:
+
+            st.warning(
+                "No hay información intradía disponible para generar el ajuste."
+            )
+
+        else:
+
+            # ==========================================
+            # CIERRE
+            # ==========================================
+            btc = btc.dropna(subset=["Close"])
+
+            S = btc["Close"]
+
+            Pf1 = S.to_numpy()
+
+            Pf2 = pd.DataFrame(
+                Pf1,
+                columns=["Close"]
+            )
+
+            Pf2["Date"] = np.arange(
+                1,
+                len(Pf2) + 1
+            )
+
+            # ==========================================
+            # VALIDACIÓN DE OBSERVACIONES
+            # ==========================================
+            if len(Pf2) < grado_polinomio + 1:
+
+                st.warning(
+                    "Se necesitan al menos 9 observaciones "
+                    "para estimar un polinomio de grado 8."
+                )
+
+            else:
+
+                # ==========================================
+                # AJUSTE POLINOMIAL
+                # ==========================================
+                coeficientes = np.polyfit(
+                    Pf2["Date"],
+                    Pf2["Close"],
+                    grado_polinomio
+                )
+
+                polinomio = np.poly1d(
+                    coeficientes
+                )
+
+                # ==========================================
+                # DERIVADA
+                # ==========================================
+                derivada = np.polyder(
+                    polinomio
+                )
+
+                # ==========================================
+                # AJUSTE
+                # ==========================================
+                x_fit = np.arange(
+                    1,
+                    len(Pf2) + 1
+                )
+
+                y_fit = polinomio(
+                    x_fit
+                )
+
+                pendiente = derivada(
+                    x_fit
+                )
+
+                # ==========================================
+                # BANDAS DE RUPTURA
+                # ==========================================
+                residuos = Pf2["Close"].values - y_fit
+
+                desv = np.std(
+                    residuos
+                )
+
+                banda_superior = (
+                    y_fit +
+                    factor_banda * desv
+                )
+
+                banda_inferior = (
+                    y_fit -
+                    factor_banda * desv
+                )
+
+                # ==========================================
+                # ÚLTIMAS 10 OBSERVACIONES
+                # ==========================================
+                ultimos_10_pendiente = pendiente[-10:]
+
+                ultimas_10_fechas = btc.index[-10:]
+
+                # ==========================================
+                # DETECCIÓN DE RUPTURA BAJISTA
+                # ==========================================
+                precio_actual = Pf2["Close"].iloc[-1]
+
+                banda_inferior_actual = banda_inferior[-1]
+
+                ruptura_bajista = (
+                    precio_actual < banda_inferior_actual
+                )
+
+                # ==========================================
+                # GRÁFICA POLINOMIAL
+                # ==========================================
+                fig2, ax = plt.subplots(
+                    figsize=(14, 6)
+                )
+
+                ax.scatter(
+                    btc.index,
+                    Pf2["Close"],
+                    label=f"Precio {ticker}",
+                    s=10
+                )
+
+                # Último dato
+                ax.scatter(
+                    btc.index[-1],
+                    precio_actual,
+                    color="#00FF00",
+                    s=80,
+                    label="Último dato",
+                    zorder=5
+                )
+
+                # Curva polinomial
+                ax.plot(
+                    btc.index,
+                    y_fit,
+                    color="red",
+                    linewidth=2,
+                    label="Ajuste Polinomial"
+                )
+
+                # Banda superior
+                ax.plot(
+                    btc.index,
+                    banda_superior,
+                    "--",
+                    color="blue",
+                    linewidth=1.5,
+                    label="Banda Superior"
+                )
+
+                # Banda inferior
+                ax.plot(
+                    btc.index,
+                    banda_inferior,
+                    "--",
+                    color="orange",
+                    linewidth=2,
+                    label="Banda Ruptura Inferior"
+                )
+
+                # Señal de ruptura bajista
+                if ruptura_bajista:
+
+                    ax.scatter(
+                        btc.index[-1],
+                        precio_actual,
+                        color="black",
+                        marker="v",
+                        s=200,
+                        label="RUPTURA BAJISTA",
+                        zorder=6
+                    )
+
+                ax.set_xlabel("Fecha y hora")
+                ax.set_ylabel("Precio")
+
+                ax.set_title(
+                    f"Ajuste Polinomial {ticker} "
+                    f"con Banda de Ruptura"
+                )
+
+                ax.legend()
+                ax.grid(True)
+
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+
+                st.pyplot(fig2)
+                plt.close(fig2)
+
+                # ==========================================
+                # INDICADORES POLINOMIALES
+                # ==========================================
+                st.subheader("Indicadores intradía")
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+
+                    st.metric(
+                        "Precio actual",
+                        f"{precio_actual:,.4f}"
+                    )
+
+                with col2:
+
+                    st.metric(
+                        "Banda inferior",
+                        f"{banda_inferior_actual:,.4f}"
+                    )
+
+                with col3:
+
+                    st.metric(
+                        "Pendiente actual",
+                        f"{pendiente[-1]:,.6f}"
+                    )
+
+                # ==========================================
+                # RUPTURA BAJISTA
+                # ==========================================
+                st.subheader("Señal de ruptura bajista")
+
+                if ruptura_bajista:
+
+                    st.error(
+                        "RUPTURA BAJISTA: el precio actual "
+                        "se encuentra por debajo de la banda inferior."
+                    )
+
+                else:
+
+                    st.success(
+                        "SIN RUPTURA BAJISTA: el precio actual "
+                        "se encuentra por encima de la banda inferior."
+                    )
+
+                # ==========================================
+                # PENDIENTE: ÚLTIMAS 10 OBSERVACIONES
+                # ==========================================
+                st.subheader("Pendiente de la función polinomial")
+
+                df_pendiente = pd.DataFrame(
+                    {
+                        "Pendiente": ultimos_10_pendiente
+                    },
+                    index=ultimas_10_fechas
+                )
+
+                st.dataframe(
+                    df_pendiente.sort_index(ascending=False),
+                    use_container_width=True
+                )
+
+                st.metric(
+                    "Pendiente promedio últimas 10 observaciones",
+                    f"{np.mean(ultimos_10_pendiente):,.6f}"
+                )
+
+# -----------------------------------------------------
 
 else:
 
