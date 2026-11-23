@@ -858,3 +858,4 @@ st.markdown("[Quantum analysis](https://appquantum-zbioqwq62gsyfz36cqjeoj.stream
 st.markdown("[Reforcement Learning](https://b8rvvwhhdmfegkkcpwreoc.streamlit.app/)")
 st.markdown("[Simult. Simulación Monte Carlo](https://simulmc-kq7fbvqbafqnateomyp8qp.streamlit.app/)")
 st.markdown("[Simulación Monte Carlo](https://dr42zwffvmeo7pls3snkuv.streamlit.app/)")
+st.markdown("[VaR-Drawdown](https://appvar-kj9zh5egahy4lfhwrkf732.streamlit.app/)")
