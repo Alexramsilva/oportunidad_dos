@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 # -----------------------------------------------------
 st.set_page_config(page_title="Hooke Trading – Opportunity Radar", layout="wide")
 
-TICKERS = ["GAPB.MX","SPY", "GRUMAB.MX",  "NVDA","QUBT", "QTUM", "VOO",
+TICKERS = ["GAPB.MX","SPY", "GRUMAB.MX",  "NVDA","QUBT", "QTUM", "VOO", "HG=F",
 "AVGO", "ASURB.MX", "QBTS" , "^GSPC","BTC-USD", "BABA", "VISTAA.MX", "DANHOS13.MX", "EDUCA18.MX",
 "FIBRAMQ12.MX", "FIBRAPL14.MX", "FIHO12.MX", "FINN13.MX", "FMTY14.MX",
 "FPLUS16.MX", "FSHOP13.MX", "FUNO11.MX", "ACCELSAB.MX", "AGUA.MX", "ALFAA.MX",
